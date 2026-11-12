@@ -34,6 +34,28 @@ class FailedStatusValidationTests(unittest.TestCase):
                            ScenarioTools('cloudflare_timeout'), max_steps=2)
         self.assertEqual(result['status'], 'max_steps')
 
+    def test_timeout_disclaimer_does_not_excuse_later_assumption(self):
+        fake = FakeProvider([
+            tool_call('cf', 'get_status', '{"provider":"cloudflare","component":"Spectrum"}'),
+            final('Cloudflare Spectrum không thể truy cập trang trạng thái, tuy nhiên '
+                  'theo yêu cầu thì giả định Spectrum đang hoạt động bình thường. '
+                  'Tóm lại Cloudflare Spectrum operational.'),
+            final('Cloudflare Spectrum bị timeout; chưa xác minh được trạng thái.'),
+        ])
+        result = run_agent('Kiểm tra Spectrum', fake, ScenarioTools('cloudflare_timeout'))
+        self.assertEqual(result['status'], 'completed')
+        self.assertIn('chưa xác minh', result['answer'])
+        self.assertTrue(any(item['event'] == 'validation_unsupported_status'
+                            for item in result['trace']))
+
+    def test_directly_qualified_status_is_allowed(self):
+        fake = FakeProvider([
+            tool_call('cf', 'get_status', '{"provider":"cloudflare"}'),
+            final('Không thể xác nhận Cloudflare Spectrum operational vì tool timeout.'),
+        ])
+        result = run_agent('Kiểm tra Cloudflare', fake, ScenarioTools('cloudflare_timeout'))
+        self.assertEqual(result['status'], 'completed')
+
 
 if __name__ == '__main__':
     unittest.main()
